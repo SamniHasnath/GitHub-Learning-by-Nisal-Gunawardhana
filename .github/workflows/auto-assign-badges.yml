@@ -1,0 +1,251 @@
+name: Auto-assign Badge Submissions
+
+on:
+  pull_request:
+    types: [opened]
+  issues:
+    types: [opened, closed]
+
+jobs:
+  auto-assign-and-label:
+    if: github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Check if submission PR
+        id: check-submission
+        run: |
+          if [[ "${{ github.event.pull_request.title }}" == *"🎖️"* ]] || [[ "${{ github.event.pull_request.title }}" == *"Badge"* ]] || [[ "${{ github.event.pull_request.title }}" == *"submission"* ]]; then
+            echo "is_submission=true" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{ github.event.issue.title }}" == *"🎖️"* ]] || [[ "${{ github.event.issue.title }}" == *"Badge"* ]] || [[ "${{ github.event.issue.title }}" == *"submission"* ]]; then
+            echo "is_submission_issue=true" >> $GITHUB_OUTPUT
+          fi
+
+      # Auto-assign PR to reviewer
+      - name: Assign PR to reviewer
+        if: github.event.pull_request && steps.check-submission.outputs.is_submission == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.pulls.createReviewRequest({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              reviewers: ['nisalgunawardhana']
+            });
+
+      # Auto-assign Issue to reviewer
+      - name: Assign issue to reviewer
+        if: github.event.issue && steps.check-submission.outputs.is_submission_issue == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: ['nisalgunawardhana']
+            });
+
+      # Extract badge level from title
+      - name: Determine badge level
+        id: badge-level
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pullTitle = (context.payload.pull_request?.title || '').toLowerCase();
+            const issueTitle = (context.payload.issue?.title || '').toLowerCase();
+            const body = context.payload.pull_request?.body || context.payload.issue?.body || '';
+
+            const findLevelInText = (text = '') => {
+              const lower = text.toLowerCase();
+              if (lower.includes('beginner')) return 'beginner';
+              if (lower.includes('intermediate')) return 'intermediate';
+              if (lower.includes('advanced')) return 'advanced';
+              return '';
+            };
+
+            const findLevelInForm = (formBody = '') => {
+              const match = formBody.match(/###\s+Which level are you submitting\?\s*\r?\n+([^\r\n]+)/i);
+              if (!match) return '';
+              return findLevelInText(match[1]);
+            };
+
+            let level = findLevelInText(`${pullTitle} ${issueTitle}`);
+            if (!level) {
+              level = findLevelInForm(body);
+            }
+            if (!level) {
+              const legacy = body.match(/\*\*My\s+Level:\*\*\s*([a-zA-Z]+)/i);
+              if (legacy) {
+                level = findLevelInText(legacy[1]);
+              }
+            }
+
+            core.setOutput('level', level);
+
+      # Add labels to PR
+      - name: Add labels to PR
+        if: github.event.pull_request && steps.check-submission.outputs.is_submission == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const labels = ['submission', 'pending-review'];
+            const level = '${{ steps.badge-level.outputs.level }}';
+            if (level) {
+              labels.push(level);
+            }
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: labels
+            });
+
+      # Add labels to Issue
+      - name: Add labels to issue
+        if: github.event.issue && steps.check-submission.outputs.is_submission_issue == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const labels = ['submission', 'pending-review'];
+            const level = '${{ steps.badge-level.outputs.level }}';
+            if (level) {
+              labels.push(level);
+            }
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: labels
+            });
+
+      # Post welcome comment on PR
+      - name: Welcome comment on PR
+        if: github.event.pull_request && steps.check-submission.outputs.is_submission == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🎖️ **Badge Submission Received!**\n\nThank you for your submission! Your work is being reviewed.\n\n**Status:** Pending Review ⏳\n**Assigned to:** @nisalgunawardhana\n**Expected Review Time:** 2-5 days\n\n📝 **Tips for Reviewers:**\n- All evidence is attached\n- Workflow files are present\n- Understanding is demonstrated\n- All tasks are completed\n\nWe'll provide feedback soon! Good luck! 🚀`
+            });
+
+      # Post welcome comment on Issue
+      - name: Welcome comment on issue
+        if: github.event.issue && steps.check-submission.outputs.is_submission_issue == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🎖️ **Badge Submission Tracking Issue Created!**\n\nYour badge submission is being tracked.\n\n**Status:** Pending Review ⏳\n**Assigned to:** @nisalgunawardhana\n**Expected Review Time:** 2-5 days\n\n✅ **Next Steps:**\n1. Ensure your PR is linked above\n2. Verify all evidence is in the PR\n3. Wait for review and feedback\n\nWe'll notify you as soon as the review is complete! 🚀`
+            });
+
+  # Auto-assign badge on issue closure
+  issue-closed-badge:
+    if: github.event.action == 'closed' && github.event.issue != null && github.actor == 'nisalgunawardhana'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Check if submission issue
+        id: check-submission
+        run: |
+          if [[ "${{ github.event.issue.title }}" == *"🎖️"* ]] || [[ "${{ github.event.issue.title }}" == *"Badge"* ]] || [[ "${{ github.event.issue.title }}" == *"submission"* ]]; then
+            echo "is_submission=true" >> $GITHUB_OUTPUT
+          fi
+
+      # Determine badge level from issue labels or body
+      - name: Determine badge level
+        id: badge-level
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.issue.labels.map(l => l.name.toLowerCase()).join(' ');
+            const body = context.payload.issue.body || '';
+
+            const mapLevelToBadge = (level) => {
+              if (level === 'beginner') return 'Beginner.png';
+              if (level === 'intermediate') return 'Intermediate.png';
+              if (level === 'advanced') return 'Advanced.png';
+              return '';
+            };
+
+            const findLevelInForm = (text) => {
+              const match = text.match(/###\s+Which level are you submitting\?\s*\r?\n+([^\r\n]+)/i);
+              if (!match) return '';
+              const answer = match[1].toLowerCase();
+              if (answer.includes('beginner')) return 'beginner';
+              if (answer.includes('intermediate')) return 'intermediate';
+              if (answer.includes('advanced')) return 'advanced';
+              return '';
+            };
+
+            const findLegacyLevel = (text) => {
+              const legacy = text.match(/\*\*My\s+Level:\*\*\s*([a-zA-Z]+)/i);
+              return legacy ? legacy[1].toLowerCase() : '';
+            };
+
+            let level = '';
+            if (labels.includes('beginner')) {
+              level = 'beginner';
+            } else if (labels.includes('intermediate')) {
+              level = 'intermediate';
+            } else if (labels.includes('advanced')) {
+              level = 'advanced';
+            } else {
+              level = findLevelInForm(body) || findLegacyLevel(body);
+            }
+
+            core.setOutput('level', level);
+            core.setOutput('badge_file', mapLevelToBadge(level));
+
+      # Add completed badge label
+      - name: Add completion badge labels
+        if: steps.check-submission.outputs.is_submission == 'true' && steps.badge-level.outputs.level != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['reviewed', 'completed', '${{ steps.badge-level.outputs.level }}']
+            });
+
+      # Add completion comment with badge image
+      - name: Add completion comment with badge
+        if: steps.check-submission.outputs.is_submission == 'true' && steps.badge-level.outputs.level != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const level = '${{ steps.badge-level.outputs.level }}';
+            const badgeFile = '${{ steps.badge-level.outputs.badge_file }}';
+            const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+            
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Hey @${{ github.event.issue.user.login }} ! 👋\nYour issue has been closed — that means you've successfully completed the GitHub Actions Learning Task !\n\n🏅 **You can now claim your completion badge!**\n\n![Badge](https://github.com/${{ github.repository }}/raw/main/images/${badgeFile})\n\n**Badge Level:** ${capitalize(level)}\n\nFollow me on GitHub - https://github.com/nisalgunawardhana\n\nGreat job, and thank you for contributing! Keep learning and exploring. 🚀`
+            });
+
