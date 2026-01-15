@@ -102,7 +102,6 @@ Three production-ready workflows to learn from:
 - **[hello-world.yml](.github/workflows/hello-world.yml)** - Basic workflow, manual triggers
 - **[build-test.yml](.github/workflows/build-test.yml)** - CI/CD pipeline with matrix testing
 - **[deploy-azure-app-service.yml](.github/workflows/deploy-azure-app-service.yml)** - Production deployment
-
 ---
 
 ## 🏅 Earn Digital Badges
@@ -609,6 +608,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Happy Learning!** 🎓
 
 
-#   G i t H u b - L e a r n i n g - b y - N i s a l - G u n a w a r d h a n a  
- #   G i t H u b - L e a r n i n g - b y - N i s a l - G u n a w a r d h a n a  
+#   G i t H u b - L e a r n i n g - b y - N i s a l - G u n a w a r d h a n a 
+ 
+ #   G i t H u b - L e a r n i n g - b y - N i s a l - G u n a w a r d h a n a 
+ 
  
